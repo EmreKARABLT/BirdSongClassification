@@ -6,7 +6,7 @@ from pathlib import Path
 from sklearn.preprocessing import LabelEncoder
 import librosa
 
-
+#
 class AudioDataset(Dataset):
     def __init__(self, path = "data/songs", metadata_path= "data/birdsong_metadata.csv" , transform = None):
         self.transform =  transform
@@ -64,7 +64,7 @@ class AudioDataset(Dataset):
     def visualize_melspectrogram(sample):
         librosa.display.specshow(sample[0], sr=sample[1], x_axis='time', y_axis='mel', hop_length=512)
 
-
+#
 class ToTensor(object):
     """Convert ndarrays in sample to Tensors."""
 
@@ -82,4 +82,4 @@ class ToTensor(object):
         return torch.from_numpy(image) , torch.from_numpy(name) , torch.from_numpy(species)
 
 ds = AudioDataset(transform=ToTensor())
-print(ds[0])
+# print(ds[0])
