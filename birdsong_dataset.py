@@ -10,12 +10,14 @@ from scipy.io import wavfile
 
 counter = 0
 class AudioDataset(Dataset):
-    def __init__(self, path = "data/songs", metadata_path= "data/birdsong_metadata.csv" , transform = None , max_len = 2, overlapping = 0.0, noise_reduction = False):
+    def __init__(self, path = "data/songs", metadata_path= "data/birdsong_metadata.csv" , transform = None , max_len = 2, overlapping = 0.0, noise_reduction = False , noise_reduction_level = 0.5):
+
 
         self.transform =  transform
         self.max_len = max_len
         self.overlapping = overlapping
         self.noise_reduction = noise_reduction
+        self.noise_reduction_level = noise_reduction_level
         self.path = Path.cwd().joinpath(path)
         self.metadata = pd.read_csv(Path.cwd().joinpath(metadata_path))
         self.names = self.encode_names()
@@ -69,7 +71,7 @@ class AudioDataset(Dataset):
     def __getitem__(self, idx):
         return self.data[idx][0], self.data[idx][1], self.data[idx][2]
     def convert_to_mel_spectrogram(self, audio , hz):
-        sgram = librosa.stft(audio)
+        sgram = librosa.stft(audio , hop_length=512 , win_length=1024)
 
         sgram_mag, _ = librosa.magphase(sgram)
         mel_scale_sgram = librosa.feature.melspectrogram(S=sgram_mag, sr=hz)
@@ -82,8 +84,9 @@ class AudioDataset(Dataset):
     def reduce_noise(self, audio , sr , name = None):
 
         global counter
-        print("NOISE REDUCTICTON ")
-        reduced_noise = nr.reduce_noise(y=audio, sr=sr, prop_decrease = 0.5)
+        # print("NOISE REDUCTICTON ")
+        reduced_noise = nr.reduce_noise(y=audio, sr=sr, prop_decrease = self.noise_reduction_level)
+
         if name is not None:
             wavfile.write(f"data/reduced/{name}.wav", sr, reduced_noise)
             counter += 1
