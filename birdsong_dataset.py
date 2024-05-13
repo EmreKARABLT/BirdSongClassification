@@ -20,6 +20,13 @@ class AudioDataset(Dataset):
         self.noise_reduction_level = noise_reduction_level
         self.path = Path.cwd().joinpath(path)
         self.metadata = pd.read_csv(Path.cwd().joinpath(metadata_path))
+
+        a = np.arange(0, len(self.metadata))
+        np.random.shuffle(a)
+        n = len(self.metadata)
+        perc_train, per_val = 0.67, 0.23
+
+        self.train, self.val, self.test = a[:int(n * perc_train)], a[int(n * perc_train):int(n * per_val)], a[int(n * (perc_train + per_val)):]
         self.names = self.encode_names()
         self.species = self.encode_species()
         self.data = self.load_data()
