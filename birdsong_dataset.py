@@ -9,8 +9,8 @@ import noisereduce as nr
 from scipy.io import wavfile
 
 counter = 0
-class AudioDataset(Dataset):
-    def __init__(self, path = "data/songs", metadata_path= "data/birdsong_metadata.csv" , transform = None , max_len = 2, overlapping = 0.0, noise_reduction = False , noise_reduction_level = 0.5):
+class SoundData():
+    def __init__(self,df , path = "data/songs" , transform = None , max_len = 2, overlapping = 0.0, noise_reduction = False , noise_reduction_level = 0.5):
 
 
         self.transform =  transform
@@ -19,20 +19,20 @@ class AudioDataset(Dataset):
         self.noise_reduction = noise_reduction
         self.noise_reduction_level = noise_reduction_level
         self.path = Path.cwd().joinpath(path)
-        self.metadata = pd.read_csv(Path.cwd().joinpath(metadata_path))
+        self.metadata = df
 
         a = np.arange(0, len(self.metadata))
         np.random.shuffle(a)
         n = len(self.metadata)
-        perc_train, per_val = 0.67, 0.23
+        perc_train, per_val = 1 , 0
 
-        self.train, self.val, self.test = a[:int(n * perc_train)], a[int(n * perc_train):int(n * per_val)], a[int(n * (perc_train + per_val)):]
+        self.train_idx, self.val_idx, self.test_idx = a[:int(n * perc_train)], a[int(n * perc_train):int(n * (perc_train+per_val))], a[int(n * (perc_train + per_val)):]
+
+        self.train_samples , self.val_samples , self.test_samples = [] , [] ,[]
+
         self.names = self.encode_names()
         self.species = self.encode_species()
-        self.data = self.load_data()
-
-    def __len__(self):
-        return len(self.data)
+        self.load_data()
 
     def encode_names(self):
         self.name_encoder = LabelEncoder()
@@ -52,8 +52,8 @@ class AudioDataset(Dataset):
 
     def load_data(self):
         assert (self.overlapping >= 0  and self.overlapping < 1 ), "invalid input"
-        samples = []
         print("Loading The Data...")
+
         for idx in range(len(self.metadata)):
             file_name = "xc" + str(self.metadata.iloc[idx].file_id) + ".flac"
             audio_path = self.path.joinpath(file_name)
@@ -64,19 +64,24 @@ class AudioDataset(Dataset):
             while start + self.max_len * hz < len(audio):
                 sub_audio = audio[start : start + self.max_len * hz]
                 mel_spec = self.convert_to_mel_spectrogram(sub_audio,hz)
-                sample = [np.array(mel_spec).reshape((mel_spec.shape[0], mel_spec.shape[1], 1)), np.array(self.names[idx]), np.array(self.species[idx])]
-                start += int(self.max_len * hz // (1 - self.overlapping))
-                samples.append(sample)
+                mel_spec = np.array(mel_spec).reshape((mel_spec.shape[0], mel_spec.shape[1], 1))
+                if self.transform is not None:
+                    mel_spec = self.transform(mel_spec)
+                sample = [ mel_spec , self.names[idx], self.species[idx]]
 
-        for i in range(len(samples)):
-            if self.transform is not None:
-                samples[i] = self.transform(samples[i])
+
+                start += int(self.max_len * hz // (1 - self.overlapping))
+
+                if idx in self.train_idx:
+                    self.train_samples.append(sample)
+                if idx in self.val_idx:
+                    self.val_samples.append(sample)
+                if idx in self.test_idx:
+                    self.test_samples.append(sample)
+
+
         print("Data Loaded !")
 
-        return samples
-
-    def __getitem__(self, idx):
-        return self.data[idx][0], self.data[idx][1], self.data[idx][2]
     def convert_to_mel_spectrogram(self, audio , hz):
         sgram = librosa.stft(audio , hop_length=512 , win_length=1024)
 
@@ -98,23 +103,73 @@ class AudioDataset(Dataset):
             wavfile.write(f"data/reduced/{name}.wav", sr, reduced_noise)
             counter += 1
         return reduced_noise
+    @property
+    def test(self):
+        images = []
+        labels_names = []
+        labels_species = []
+
+        for data in self.test_samples:
+            images.append(data[0])
+            labels_names.append( np.array(data[1]))
+            labels_species.append( np.array(data[2]))
+
+
+        images = np.array(images)  # transform to torch tensor
+        names = np.array(labels_names)
+        species = np.array(labels_species)
+        return {"data" : images , "name_labels" : names , "species_labels" : species}
+    @property
+    def train(self):
+        images = []
+        labels_names = []
+        labels_species = []
+
+        for data in self.train_samples:
+            images.append(data[0])
+            labels_names.append( np.array(data[1]))
+            labels_species.append( np.array(data[2]))
+
+
+        images = np.array(images)  # transform to torch tensor
+        names = np.array(labels_names)
+        species = np.array(labels_species)
+        return {"data" : images , "name_labels" : names , "species_labels" : species}
+    @property
+    def val(self):
+        images = []
+        labels_names = []
+        labels_species = []
+
+        for data in self.val_samples:
+            images.append(data[0])
+            labels_names.append( np.array(data[1]))
+            labels_species.append( np.array(data[2]))
+
+
+        images = np.array(images)  # transform to torch tensor
+        names = np.array(labels_names)
+        species = np.array(labels_species)
+        return {"data" : images , "name_labels" : names , "species_labels" : species}
+
 
 #
-class ToTensor(object):
-    """Convert ndarrays in sample to Tensors."""
-
-    def __call__(self, sample):
-        image = sample[0]
-
-        name = sample[1]
-        species =sample[2]
 
 
-        # swap color axis because
-        # numpy image: H x W x C
-        # torch image: C x H x W
-        image = image.transpose((2, 0, 1))
-        return torch.from_numpy(image) , torch.from_numpy(name) , torch.from_numpy(species)
 
-# ds = AudioDataset(transform=ToTensor() , max_len=3, overlapping=0, noise_reduction=True)
-# print(len(ds))
+
+class AudioDataset(Dataset):
+    def __init__(self , sounds ,transform = None):
+        # super(AudioDataset,self).__init__()
+        self.transform = transform
+        self.data = sounds['data']
+        self.names = sounds['name_labels']
+        self.species = sounds['species_labels']
+    def __len__(self):
+        return len(self.data)
+
+    def __getitem__(self, idx):
+        if self.transform:
+            return self.transform([self.data[idx] , self.names[idx] , self.species[idx]])
+        return self.data[idx] , self.names[idx] , self.species[idx]
+
